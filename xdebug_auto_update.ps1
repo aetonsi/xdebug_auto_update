@@ -1,49 +1,38 @@
 [CmdletBinding(PositionalBinding = $false)]
 param(
-	[Parameter(Mandatory = $false)] [string] $phpbin = "",
-	[Parameter(Mandatory = $false)] [string] $ini = "",
-	[Parameter(Mandatory = $false)] [string] $xdebug_dll_filename = "php_xdebug.dll",
-	[Parameter(Mandatory = $false)] [switch] $confirm = $false,
+	[Parameter(Mandatory = $false)][string] $phpbin = '',
+	[Parameter(Mandatory = $false)][string] $ini = '',
+	[Parameter(Mandatory = $false)][string] $xdebug_dll_filename = 'php_xdebug.dll',
+	[Parameter(Mandatory = $false)][switch] $confirm = $false,
+	[Parameter(Mandatory = $false)][AllowEmptyString()][string] $logfile = "$PWD/xdebug_auto_update_$(get-date -format 'yyyy-MM-dd_HH.mm.ss').log",
 	[parameter(Position = 0, ValueFromRemainingArguments = $true)] $args
 )
-$wizard_url = "https://xdebug.org/wizard"
-$ErrorActionPreference = "Stop"
+$ErrorActionPreference = 'Stop'
+. "$PSScriptRoot/src/functions.ps1"
+$wizard_parser_script = "$PSScriptRoot/src/wizard_parser_script.php"
+$wizard_url = 'https://xdebug.org/wizard'
 
-function title([string] $text) { ''; write-host -foregroundcolor Magenta -backgroundcolor white $text }
-function warn([string] $text) { write-warning $text }
-function out([string] $text) { Write-Output "> $text" }
-function err([string] $text) { Write-Error $text }
-function confirm([string] $text) {
-	"`n" ; out "$text"
-	if ($script:confirm) {
-		out '[AUTO_CONFIRM]'
-		return $true
-	}
-	$a = Read-Host
-	$ok = ($a.tolower() -eq 'yes') -or ($a.tolower() -eq 'y')
-	if (!$ok) {
-		err "Aborted."
-		exit 123456
-	}
-	return $ok
+
+if (![string]::IsNullOrEmpty($logfile)) {
+	Start-Transcript -Path $logfile
 }
-$php_code_get_stdin = "define('INPUT', stream_get_contents(STDIN));define('INPUT_ROWS',explode(PHP_EOL, INPUT));"
 
 
 
-title "SCRIPT STARTED ..."
+section "SCRIPT STARTED ..."
 out "arg 'phpbin': $phpbin"
 out "arg 'ini': $ini"
 out "arg 'xdebug_dll_filename': $xdebug_dll_filename"
-out "arg 'auto_confirm': $auto_confirm"
-out "ignored additional arguments: $args"
+out "arg 'confirm': $confirm"
+out "arg 'logfile': $logfile"
+if (!!$args) { out "[ignored additional arguments: $args]" }
 $phpbin_passed = !!$phpbin
 $ini_passed = !!$ini
 $output_filename = $xdebug_dll_filename
 
 
 
-title "PHPBIN & INI FILE SETUP ..."
+section "PHPBIN & INI FILE SETUP ..."
 if (!$phpbin_passed) {
 	out "looking for phpbin ..."
 	$phpbin = "php"
@@ -52,11 +41,11 @@ $where_phpbin = Get-Command $phpbin -ErrorAction SilentlyContinue
 if (!$where_phpbin) {
 	if (!$phpbin_passed) {
 		err "phpbin not found in PATH and not specified via argument"
-		exit 111
+		exit 11
 	}
 	else {
 		err "specified phpbin '$phpbin' not found"
-		exit 222
+		exit 22
 	}
 }
 $phpbin = $where_phpbin.source
@@ -70,18 +59,18 @@ if (!$ini_passed) {
 	).TRIM()
 	if (($ini_filepath.contains("none")) -or ($ini_filepath -eq "") -or (!(test-path $ini_filepath))) {
 		err "it seems like the php binary '$phpbin' doesn't use any php.ini file! please create one and rerun this script."
-		exit 333
+		exit 33
 	}
 }
 else {
 	if (!(test-path $ini_filepath)) {
 		err "ini file '$ini_filepath' not found!"
-		exit 444
+		exit 44
 	}
 	else {
 		if (!($ini_filepath -Like "*.ini")) {
 			err "ini file '$ini_filepath' not valid!"
-			exit 555
+			exit 55
 		}
 	}
 }
@@ -91,7 +80,7 @@ $ini_content = get-content $ini_filepath | OUT-STRING
 
 
 
-title "GETTING PHP CONFIG VIA php -i ..."
+section "GETTING PHP CONFIG VIA php -i ..."
 $runtime_config = (& $phpbin -c $ini_filepath -d xdebug.mode=off -d xdebug.enable=0 -i) | out-string
 $extension_dir = ($runtime_config | & findstr /r "/c:^[ ]*extension_dir[ ]*=.*`$")
 if (!$extension_dir) {
@@ -108,7 +97,7 @@ out "using extension_dir: $actual_extension_dir"
 
 
 
-title "CHECKING XDEBUG STATUS ..."
+section "CHECKING XDEBUG STATUS ..."
 if ($runtime_config.contains("xdebug.loglevel")) {
 	out "xdebug already installed!"
 	confirm "do you want to update/reinstall? (yes/no)"
@@ -119,7 +108,7 @@ else {
 
 
 
-title "CONFIRMATION"
+section "CONFIRMATION"
 out "phpbin='$phpbin'"
 out "phpdir='$phpdir'"
 out "ini file='$ini_filepath'"
@@ -131,12 +120,12 @@ confirm "Continue? (yes-no)"
 
 
 
-title "ENCODING PHP CONFIG WITH urlencode() ..."
-$runtime_config_encoded = $runtime_config | & $phpbin -d xdebug.mode=off -d xdebug.enable=0 -r "$php_code_get_stdin echo urlencode(INPUT);" | out-string
+section "ENCODING PHP CONFIG WITH urlencode() ..."
+$runtime_config_encoded = $runtime_config | & $phpbin -d xdebug.mode=off -d xdebug.enable=0 -r "echo urlencode(stream_get_contents(STDIN));" | out-string
 
 
 
-title "SENDING CONFIG TO ONLINE WIZARD"
+section "SENDING CONFIG TO ONLINE WIZARD"
 try {
 	$response = Invoke-WebRequest -Method POST -Headers @{"content-type" = "application/x-www-form-urlencoded" } -Body "submit&data=$runtime_config_encoded" $wizard_url
 }
@@ -147,30 +136,22 @@ if (!$response -or ($response.statuscode -ne 200)) {
 	err "Error during web request or local file saving"
 	$response
 	$err
-	exit 666
+	exit 66
 }
 
 
 
-title "PARSING RESPONSE BODY ..."
+section "PARSING RESPONSE BODY ..."
 $response_html_body = $response.content
-$href = $response_html_body | & $phpbin -d xdebug.mode=off -d xdebug.enable=0 -r "
-$php_code_get_stdin
-`$utf8=mb_convert_encoding(INPUT, 'HTML-ENTITIES', 'UTF-8');
-`$doc=new DomDocument();
-@`$doc->loadHTML(`$utf8);
-`$xpath=new DOMXpath(`$doc);
-`$href=`$xpath->query('/html/body/main/ol/li[1]/a')?->item(0)?->attributes->getNamedItem('href')->textContent;
-if(!`$href)exit;
-echo `$href;"
-if (!$href) {
+$href = $response_html_body | & $phpbin -d xdebug.mode=off -d xdebug.enable=0 -f $wizard_parser_script
+if (($LASTEXITCODE -ne 0) -or !$href) {
 	err "could not determine download URL"
-	exit 777
+	exit 77
 }
 
 
 
-title "DOWNLOADING DLL ..."
+section "DOWNLOADING DLL ..."
 out "href='$href'"
 $remote_filename = [io.path]::GetFileName($href)
 out "remote_filename='$remote_filename'"
@@ -186,17 +167,14 @@ catch {
 	$err = $_
 }
 if (!$dlok -or $err -or ($dl -and ($dl.statuscode -ne 200))) {
-	err "Error during web request"
-	out $dlok
-	out $dl
-	out $err
+	err "Error during web request: $err"
 	exit 888
 }
 out "file downloaded"
 
 
 
-title "UPDATING PHP.INI ..."
+section "UPDATING PHP.INI ..."
 if ($output_filename -eq 'php_xdebug.dll') {
 	$new_zend_extension_value = 'xdebug'
 }
@@ -223,4 +201,8 @@ out "new_zend_extension_value='$new_zend_extension_value'"
 
 
 "`n`n" ; Write-Host -ForegroundColor white -BackgroundColor Green " ====== ALL DONE ====== " ; ""
-timeout 6
+out 'Quitting in 6 seconds...'
+if (![string]::IsNullOrEmpty($logfile)) {
+	Stop-Transcript
+}
+& timeout 6
