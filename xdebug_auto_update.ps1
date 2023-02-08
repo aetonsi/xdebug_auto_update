@@ -201,8 +201,14 @@ out "new_zend_extension_value='$new_zend_extension_value'"
 
 
 "`n`n" ; Write-Host -ForegroundColor white -BackgroundColor Green " ====== ALL DONE ====== " ; ""
-out 'Quitting in 6 seconds...'
+Write-Output 'Printing xdebug info:'
+
+& $phpbin -c $ini_filepath -r "echo 'xdebug extension loaded: ' . var_export(extension_loaded('xdebug'), true) . PHP_EOL;" | write-host -ForegroundColor White -BackgroundColor Green
+& $phpbin -c $ini_filepath -i | Where-Object { $_ -ilike '*xdebug*' }
+''
+out 'Quitting in 6 seconds (and opening xdebug dll folder in explorer)...'
 if (![string]::IsNullOrEmpty($logfile)) {
 	Stop-Transcript
 }
+& explorer.exe "/select,$output_filepath"
 & timeout 6
