@@ -182,7 +182,7 @@ else {
 	$new_zend_extension_value = $output_filepath
 }
 out "reading ini file '$ini_filepath'"
-$inibck_filepath = "$ini_filepath.bck_$(datetime)"
+$inibck_filepath = "$ini_filepath.bck_$(get-date -Format 'yyyy-mm-dd_HH.mm.ss')"
 Copy-Item $ini_filepath $inibck_filepath
 out "backup created: $inibck_filepath"
 if ($ini_content | & findstr /r "/c:^[ ]*zend_extension[ ]*=.*`$") {
