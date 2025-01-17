@@ -4,7 +4,7 @@ param(
 	[Parameter(Mandatory = $false)][string] $ini = '',
 	[Parameter(Mandatory = $false)][string] $xdebug_dll_filename = 'php_xdebug.dll',
 	[Parameter(Mandatory = $false)][switch] $confirm = $false,
-	[Parameter(Mandatory = $false)][AllowEmptyString()][string] $logfile = "$PWD/xdebug_auto_update_$(get-date -format 'yyyy-MM-dd_HH.mm.ss').log",
+	[Parameter(Mandatory = $false)][AllowEmptyString()][string] $logfile = "c:/_/logs/xdebug_auto_update/log_$(get-date -format 'yyyy-MM-dd_HH.mm.ss').log",
 	[parameter(Position = 0, ValueFromRemainingArguments = $true)] $args
 )
 $ErrorActionPreference = 'Stop'
@@ -37,7 +37,7 @@ if (!$phpbin_passed) {
 	out "looking for phpbin ..."
 	$phpbin = "php"
 }
-$where_phpbin = Get-Command $phpbin -ErrorAction SilentlyContinue
+$where_phpbin = Get-Command $phpbin -ErrorAction SilentlyContinue -All
 if (!$where_phpbin) {
 	if (!$phpbin_passed) {
 		err "phpbin not found in PATH and not specified via argument"
@@ -48,8 +48,14 @@ if (!$where_phpbin) {
 		exit 22
 	}
 }
-$phpbin = $where_phpbin.source
-out "using phpbin: $phpbin"
+$phpbin = 'php'
+out "found possible phpbinS: "
+$where_phpbin
+foreach ($p in $where_phpbin) {
+	$p = $p.source
+	if ((Read-Host -Prompt " - use $p as phpbin ? (y/n)") -ieq 'y' ) { $phpbin = $p; break }
+}
+out "> using phpbin: $phpbin"
 if (!$ini_passed) {
 	out "looking for ini file ..."
 	$ini_filepath = (
@@ -201,14 +207,19 @@ out "new_zend_extension_value='$new_zend_extension_value'"
 
 
 "`n`n" ; Write-Host -ForegroundColor white -BackgroundColor Green " ====== ALL DONE ====== " ; ""
-Write-Output 'Printing xdebug info:'
+out 'Printing xdebug info:'
 
 & $phpbin -c $ini_filepath -r "echo 'xdebug extension loaded: ' . var_export(extension_loaded('xdebug'), true) . PHP_EOL;" | write-host -ForegroundColor White -BackgroundColor Green
 & $phpbin -c $ini_filepath -i | Where-Object { $_ -ilike '*xdebug*' }
 ''
 out 'Quitting in 6 seconds (and opening xdebug dll folder in explorer)...'
+& explorer.exe "/select,$output_filepath"
+
+"`n`n" ; Write-Host -ForegroundColor white -BackgroundColor Green " ====== FINAL CHECK ====== " ; ""
+& php -v
+
 if (![string]::IsNullOrEmpty($logfile)) {
 	Stop-Transcript
 }
-& explorer.exe "/select,$output_filepath"
+
 & timeout 6
